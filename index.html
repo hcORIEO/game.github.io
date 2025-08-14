@@ -3,290 +3,279 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Square Dodger</title>
+  <title>Orinea FPS</title>
   <style>
-    /* ===============================
-       Square Dodger — tiny JS game
-       ===============================
-       Hosting on GitHub Pages:
-       1) Save this file as: index.html (exact name)
-       2) Put it in your repo root (not inside a folder)
-       3) Commit & push, then enable Pages: main / (root)
-       4) Open https://<your-username>.github.io/<repo-name>/
-    */
-
-    :root {
-      --bg: #0f1226;     /* background */
-      --panel: #15183a;  /* frame */
-      --text: #e9ecff;   /* text */
-      --player: #ffd166; /* player color */
-      --danger: #ff4d6d; /* enemy */
-      --ok: #8be9fd;     /* accents */
+    :root{
+      --bg:#0a0c16; --panel:#141833; --text:#e8ecff; --accent:#82e0ff; --accent2:#50fa7b; --danger:#ff4d6d;
     }
-
-    * { box-sizing: border-box; }
-    html, body { height: 100%; margin: 0; }
-    body {
-      background: radial-gradient(1200px 800px at 20% -10%, #1b1f47 0%, var(--bg) 60%);
-      color: var(--text);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial;
-      display: grid; place-items: center;
-      padding: 14px;
-    }
-
-    .wrap { width: min(860px, 100%); }
-    header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
-    h1 { font-size: clamp(20px, 3vw, 28px); margin: 0; }
-    .muted { opacity: 0.8; font-size: 0.95rem; }
-    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    button {
-      background: var(--panel); color: var(--text);
-      border: 1px solid #2b2f59; border-radius: 999px; padding: 8px 12px;
-      font-weight: 700; cursor: pointer;
-    }
-
-    .frame {
-      position: relative; border: 1px solid #2b2f59; border-radius: 16px;
-      overflow: hidden; box-shadow: 0 12px 30px rgba(0,0,0,0.25);
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
-    }
-
-    canvas { display: block; width: 100%; height: auto; background: #0b0f27; }
-
-    .hud { position: absolute; inset: 0 0 auto 0; display:flex; justify-content:space-between; padding: 10px 14px; pointer-events:none; }
-    .badge { background: rgba(0,0,0,0.35); padding: 6px 10px; border-radius: 999px; border:1px solid rgba(255,255,255,0.1); font-weight: 800; }
-
-    .mobile { position: absolute; left: 50%; transform: translateX(-50%); bottom: 10px; display: none; gap: 10px; }
-    .touch { width: 64px; height: 64px; border-radius: 50%; background: var(--panel); color: var(--text); border: 1px solid #2b2f59; display: grid; place-items:center; font-size: 24px; }
-
-    @media (max-width: 640px){ .mobile { display: flex; } }
+    *{box-sizing:border-box} html,body{height:100%;margin:0}
+    body{background:radial-gradient(1200px 800px at 20% -10%, #1b1f47 0%, var(--bg) 60%); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial; overflow:hidden}
+    #ui{position:fixed;inset:auto 0 0 0;display:flex;justify-content:center;pointer-events:none}
+    #hud{position:fixed;top:10px;left:10px;display:flex;gap:8px;align-items:center;pointer-events:none}
+    .badge{background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.1);border-radius:999px;padding:6px 10px;font-weight:800}
+    #center{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none}
+    #crosshair{width:18px;height:18px;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,0.55) inset}
+    #weapon{position:fixed;right:22px;bottom:14px;pointer-events:none;opacity:0.9}
+    #weapon .slot{display:inline-block;padding:6px 10px;margin-left:6px;border-radius:10px;border:1px solid #2b2f59;background:rgba(0,0,0,0.35);font-weight:800}
+    #weapon .active{outline:2px solid var(--accent)}
+    #overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center}
+    #overlay h1{margin:0;font-size:32px}
+    #overlay .small{opacity:0.85}
+    #overlay button{pointer-events:auto;cursor:pointer;background:var(--panel);color:var(--text);border:1px solid #2b2f59;border-radius:999px;padding:10px 14px;font-weight:800}
+    #loaderBar{width:min(380px,80vw);height:12px;border-radius:999px;border:1px solid #2b2f59;background:#0b0f27;overflow:hidden}
+    #loaderFill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+    #bottom{position:fixed;left:10px;bottom:10px;font-size:12px;opacity:0.8}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div>
-        <h1>Square Dodger</h1>
-        <div class="muted">Move left/right and avoid falling blocks. Survive to score!</div>
-      </div>
-      <div class="row">
-        <button id="startBtn">Start</button>
-        <button id="pauseBtn">Pause</button>
-        <button id="resetBtn">Reset</button>
-      </div>
-    </header>
-
-    <div class="frame">
-      <canvas id="game" width="860" height="520"></canvas>
-      <div class="hud">
-        <div class="badge">Score: <span id="score">0</span></div>
-        <div class="badge">Best: <span id="best">0</span></div>
-        <div class="badge">Lives: <span id="lives">3</span></div>
-      </div>
-      <div class="mobile">
-        <button class="touch" id="left">⟵</button>
-        <button class="touch" id="right">⟶</button>
-      </div>
-    </div>
-
-    <p class="muted">Controls: ← / → or A / D to move · Space = start/pause · R = reset</p>
+  <div id="overlay">
+    <h1>Orinea FPS</h1>
+    <div id="loaderBar"><div id="loaderFill"></div></div>
+    <div class="small">Loading…</div>
+    <button id="playBtn" style="display:none">Click to Play</button>
+    <div class="small">Created by <b>Orinea Demana</b></div>
   </div>
 
-  <script>
-    // ======= Config (easy to edit) =======
-    const CFG = {
-      playerW: 80,
-      playerH: 18,
-      playerSpeed: 8,
-      gravity: 0.23,
-      spawnEvery: 700, // ms
-      dangerMin: 16,
-      dangerMax: 32,
-      maxLives: 3,
-    };
+  <div id="hud">
+    <div class="badge">HP: <span id="hp">100</span></div>
+    <div class="badge">Ammo: <span id="ammo">∞</span></div>
+    <div class="badge">Score: <span id="score">0</span></div>
+    <div class="badge">Bots: <span id="bots">0</span></div>
+  </div>
 
-    const COLORS = {
-      player: getComputedStyle(document.documentElement).getPropertyValue('--player') || '#ffd166',
-      danger: getComputedStyle(document.documentElement).getPropertyValue('--danger') || '#ff4d6d',
-      ok: getComputedStyle(document.documentElement).getPropertyValue('--ok') || '#8be9fd',
-      text: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e9ecff',
-    };
+  <div id="center"><div id="crosshair"></div></div>
+  <div id="weapon">
+    <span class="slot active" id="slot1">1 • Pistol</span>
+    <span class="slot" id="slot2">2 • Rifle</span>
+    <span class="slot" id="slot3">3 • Shotgun</span>
+  </div>
+  <div id="ui"><div id="bottom">WASD to move • Mouse to look • Click to shoot • 1/2/3 switch guns • Shift sprint • R reload (pseudo)</div></div>
 
-    // ======= State =======
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
+  <script type="module">
+    // ---------- Minimal FPS using Three.js (no external assets) ----------
+    import * as THREE from 'https://unpkg.com/three@0.159.0/build/three.module.js';
+    import { PointerLockControls } from 'https://unpkg.com/three@0.159.0/examples/jsm/controls/PointerLockControls.js';
+
+    // Loading screen simulation (we don't have heavy assets, so fake progress)
+    const overlay = document.getElementById('overlay');
+    const playBtn = document.getElementById('playBtn');
+    const loaderFill = document.getElementById('loaderFill');
+    let fakeP = 0; const fakeInt = setInterval(()=>{ fakeP = Math.min(100, fakeP + Math.random()*12); loaderFill.style.width = fakeP+'%'; if (fakeP>=100){ clearInterval(fakeInt); document.querySelector('#overlay .small').textContent = 'Ready'; playBtn.style.display='inline-block'; } }, 220);
+
+    // Scene / Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias:true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b0f27);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 1.6, 5);
+
+    // Lights
+    const hemi = new THREE.HemisphereLight(0xb1e1ff, 0x111122, 1.0); scene.add(hemi);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(5,10,2); dir.castShadow=true; scene.add(dir);
+
+    // Floor & simple arena walls
+    const floorGeo = new THREE.PlaneGeometry(120,120);
+    const floorMat = new THREE.MeshStandardMaterial({ color:0x151a3a, metalness:0.1, roughness:0.9 });
+    const floor = new THREE.Mesh(floorGeo, floorMat); floor.rotation.x = -Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+
+    const wallMat = new THREE.MeshStandardMaterial({ color:0x1a204a, metalness:0.2, roughness:0.8 });
+    const walls = new THREE.Group();
+    const w = 60, h = 6, t = 0.5;
+    const makeWall = (x,z,rx=0)=>{ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,t), wallMat); m.position.set(x,h/2,z); m.rotation.y = rx; m.castShadow=true; m.receiveShadow=true; walls.add(m); };
+    makeWall(0, -w, 0); makeWall(0, w, 0); makeWall(-w, 0, Math.PI/2); makeWall(w, 0, Math.PI/2);
+    scene.add(walls);
+
+    // Some cover boxes
+    const boxMat = new THREE.MeshStandardMaterial({ color:0x243066, metalness:0.3, roughness:0.7 });
+    for (let i=0;i<24;i++){
+      const s = 0.6 + Math.random()*1.6;
+      const b = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), boxMat);
+      b.position.set((Math.random()-0.5)*90, s/2, (Math.random()-0.5)*90);
+      b.castShadow=true; b.receiveShadow=true; scene.add(b);
+    }
+
+    // Controls (Pointer Lock)
+    const controls = new PointerLockControls(camera, renderer.domElement);
+    const velocity = new THREE.Vector3();
+    const direction = new THREE.Vector3();
+    const keys = {};
+    document.addEventListener('keydown', (e)=> keys[e.code]=true);
+    document.addEventListener('keyup',   (e)=> keys[e.code]=false);
+
+    playBtn.addEventListener('click', ()=>{ overlay.style.display='none'; controls.lock(); });
+    controls.addEventListener('unlock', ()=>overlay.style.display='flex');
+
+    // Player stats
+    let HP = 100; let score = 0;
+    const hpEl = document.getElementById('hp');
+    const ammoEl = document.getElementById('ammo');
     const scoreEl = document.getElementById('score');
-    const bestEl = document.getElementById('best');
-    const livesEl = document.getElementById('lives');
-    const startBtn = document.getElementById('startBtn');
-    const pauseBtn = document.getElementById('pauseBtn');
-    const resetBtn = document.getElementById('resetBtn');
-    const leftBtn = document.getElementById('left');
-    const rightBtn = document.getElementById('right');
+    const botsEl = document.getElementById('bots');
 
-    const W = canvas.width; const H = canvas.height;
-    const state = {
-      playing: false,
-      paused: false,
-      score: 0,
-      best: Number(localStorage.getItem('dodger-best') || 0),
-      lives: CFG.maxLives,
-      lastSpawn: 0,
-      blocks: [],
-      keys: new Set(),
-      player: { x: W/2, y: H-36, w: CFG.playerW, h: CFG.playerH },
-    };
-    bestEl.textContent = state.best;
+    // Weapons
+    const WEAPONS = [
+      { name:'Pistol', dmg:34, spread:0.003, rpm:240, pellets:1, color:0xffe08a },
+      { name:'Rifle',  dmg:20, spread:0.0016, rpm:600, pellets:1, color:0x82e0ff },
+      { name:'Shotgun',dmg:10, spread:0.01, rpm:120, pellets:8, color:0xff9aa2 },
+    ];
+    let weaponIndex = 0; let lastShot = 0; let reloading=false;
+    const muzzle = new THREE.PointLight(0xffffff, 0, 10); scene.add(muzzle);
 
-    // ======= Input =======
+    const slotEls = [document.getElementById('slot1'),document.getElementById('slot2'),document.getElementById('slot3')];
+    function setWeapon(i){ weaponIndex = i; slotEls.forEach((el,idx)=> el.classList.toggle('active', idx===i)); }
     window.addEventListener('keydown', (e)=>{
-      const k = e.key.toLowerCase();
-      if (['arrowleft','arrowright','a','d'].includes(k)) state.keys.add(k);
-      if (k === ' ') togglePause();
-      if (k === 'r') reset();
-    });
-    window.addEventListener('keyup', (e)=> state.keys.delete(e.key.toLowerCase()));
-
-    let touchDir = 0; // -1 left, +1 right
-    const press = (d)=> ()=> touchDir = d;
-    const release = (d)=> ()=> { if (touchDir === d) touchDir = 0; };
-    ['pointerdown','touchstart'].forEach(ev=>{
-      leftBtn.addEventListener(ev, press(-1), { passive: true });
-      rightBtn.addEventListener(ev, press(1), { passive: true });
-    });
-    ['pointerup','pointerleave','touchend'].forEach(ev=>{
-      leftBtn.addEventListener(ev, release(-1));
-      rightBtn.addEventListener(ev, release(1));
+      if (e.code==='Digit1') setWeapon(0);
+      if (e.code==='Digit2') setWeapon(1);
+      if (e.code==='Digit3') setWeapon(2);
+      if (e.code==='KeyR') { reloading=true; ammoEl.textContent='…'; setTimeout(()=>{ reloading=false; ammoEl.textContent='∞'; }, 800); }
     });
 
-    startBtn.onclick = start; pauseBtn.onclick = togglePause; resetBtn.onclick = reset;
+    // Raycaster for shooting
+    const ray = new THREE.Raycaster();
+    window.addEventListener('mousedown', ()=> shoot());
 
-    // ======= Game helpers =======
-    function start(){
-      if (!state.playing){
-        state.playing = true; state.paused = false; state.blocks = [];
-        state.score = 0; state.lives = CFG.maxLives; state.lastSpawn = 0;
-        scoreEl.textContent = 0; livesEl.textContent = state.lives;
-        last = performance.now();
-        requestAnimationFrame(loop);
-      }
-    }
-    function togglePause(){ if (!state.playing) { start(); return; } state.paused = !state.paused; if (!state.paused) { last = performance.now(); requestAnimationFrame(loop); } }
-    function reset(){ state.playing = false; state.paused = false; state.blocks = []; state.score = 0; state.lives = CFG.maxLives; scoreEl.textContent = 0; livesEl.textContent = state.lives; draw(); }
+    function shoot(){
+      if (!controls.isLocked || reloading) return;
+      const w = WEAPONS[weaponIndex];
+      const now = performance.now();
+      const minDelay = 60000 / w.rpm; if (now - lastShot < minDelay) return; lastShot = now;
 
-    function spawn(){
-      const w = rnd(CFG.dangerMin, CFG.dangerMax);
-      const x = rnd(0, W - w);
-      const y = -w;
-      const vx = rnd(-0.6, 0.6);
-      const vy = rnd(1.8, 2.4);
-      state.blocks.push({ x, y, w, h: w, vx, vy });
-    }
-    function rnd(a,b){ return a + Math.random()*(b-a); }
+      // Muzzle flash
+      muzzle.position.copy(camera.position);
+      muzzle.intensity = 3; setTimeout(()=> muzzle.intensity=0, 40);
 
-    function collideRect(ax, ay, aw, ah, bx, by, bw, bh){
-      return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
-    }
-
-    // ======= Drawing =======
-    function drawBackground(){
-      // little stars
-      const n = 120; ctx.save(); ctx.globalAlpha = 0.6;
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      for (let i = 0; i < n; i++){
-        const x = (i*73 % W); const y = (i*137 % H);
-        const r = (i%5)*0.25 + 0.2; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-      }
-      ctx.restore();
-
-      // glow at bottom
-      const g = ctx.createLinearGradient(0, H*0.6, 0, H);
-      g.addColorStop(0, 'rgba(139,233,253,0)');
-      g.addColorStop(1, 'rgba(139,233,253,0.25)');
-      ctx.fillStyle = g; ctx.fillRect(0, H*0.6, W, H*0.4);
-    }
-
-    function drawPlayer(){
-      const p = state.player; ctx.fillStyle = COLORS.player; round(ctx, p.x - p.w/2, p.y - p.h/2, p.w, p.h, 9); ctx.fill();
-    }
-
-    function drawBlocks(){
-      ctx.fillStyle = COLORS.danger;
-      for (const b of state.blocks){ round(ctx, b.x, b.y, b.w, b.h, 6); ctx.fill(); }
-    }
-
-    function round(ctx, x, y, w, h, r){
-      const rr = Math.min(r, w/2, h/2);
-      ctx.beginPath(); ctx.moveTo(x+rr, y);
-      ctx.arcTo(x+w, y, x+w, y+h, rr);
-      ctx.arcTo(x+w, y+h, x, y+h, rr);
-      ctx.arcTo(x, y+h, x, y, rr);
-      ctx.arcTo(x, y, x+w, y, rr);
-      ctx.closePath();
-    }
-
-    function overlay(title, sub){
-      ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0,0,W,H);
-      ctx.fillStyle = COLORS.text; ctx.textAlign = 'center';
-      ctx.font = '700 42px system-ui, -apple-system, Segoe UI, Roboto'; ctx.fillText(title, W/2, H/2 - 10);
-      ctx.font = '500 18px system-ui, -apple-system, Segoe UI, Roboto'; if (sub) ctx.fillText(sub, W/2, H/2 + 24);
-      ctx.restore();
-    }
-
-    function draw(){
-      ctx.clearRect(0,0,W,H);
-      drawBackground();
-      drawBlocks();
-      drawPlayer();
-      if (!state.playing) overlay('Square Dodger', 'Press Space or Start');
-      else if (state.paused) overlay('Paused', 'Press Space to resume');
-    }
-
-    // ======= Loop =======
-    let last = performance.now();
-    function loop(ts){
-      if (!state.playing || state.paused){ draw(); return; }
-      const dt = Math.min(33, ts - last); last = ts; // clamp
-
-      // Move player
-      const p = state.player; let dir = 0;
-      if (state.keys.has('arrowleft') || state.keys.has('a')) dir -= 1;
-      if (state.keys.has('arrowright') || state.keys.has('d')) dir += 1;
-      dir += touchDir;
-      p.x += dir * CFG.playerSpeed; p.x = Math.max(p.w/2, Math.min(W - p.w/2, p.x));
-
-      // Spawn blocks
-      state.lastSpawn += dt; if (state.lastSpawn >= CFG.spawnEvery){ state.lastSpawn = 0; spawn(); }
-
-      // Update blocks
-      for (const b of state.blocks){ b.vy += CFG.gravity * (dt/16.67); b.x += b.vx * (dt/16.67); b.y += (b.vy||2) * (dt/16.67); }
-
-      // Collisions & cleanup
-      for (let i = state.blocks.length - 1; i >= 0; i--){
-        const b = state.blocks[i];
-        // walls
-        if (b.x < 0 && b.vx < 0) b.vx *= -0.9;
-        if (b.x + b.w > W && b.vx > 0) b.vx *= -0.9;
-        if (collideRect(p.x - p.w/2, p.y - p.h/2, p.w, p.h, b.x, b.y, b.w, b.h)){
-          state.blocks.splice(i,1); // hit
-          state.lives--; livesEl.textContent = state.lives;
-          if (state.lives <= 0){
-            state.playing = false;
-            if (state.score > state.best){ state.best = state.score; localStorage.setItem('dodger-best', String(state.best)); bestEl.textContent = state.best; }
-          }
-        } else if (b.y > H + 40){
-          state.blocks.splice(i,1); // escaped — award points
-          state.score++; scoreEl.textContent = state.score;
-          // slight ramp
-          CFG.spawnEvery = Math.max(380, CFG.spawnEvery - 2);
+      // Fire pellets
+      for (let i=0;i<w.pellets;i++){
+        const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+        // add spread
+        dir.x += (Math.random()-0.5)*w.spread; dir.y += (Math.random()-0.5)*w.spread; dir.z += (Math.random()-0.5)*w.spread;
+        dir.normalize();
+        ray.set(camera.position, dir);
+        const hit = ray.intersectObjects(botGroup.children, false)[0];
+        if (hit){
+          const bot = hit.object.userData.bot;
+          if (bot){ bot.hp -= w.dmg; spawnHitSpark(hit.point); if (bot.hp<=0) killBot(bot); }
+        } else {
+          // bullet tracer
+          spawnTracer(camera.position.clone(), dir.clone().multiplyScalar(30));
         }
       }
-
-      draw();
-      requestAnimationFrame(loop);
     }
 
-    draw(); // first paint
+    // Simple VFX
+    const tracerMat = new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:0.9 });
+    function spawnTracer(start, vec){
+      const geom = new THREE.BufferGeometry().setFromPoints([start, start.clone().add(vec)]);
+      const ln = new THREE.Line(geom, tracerMat); ln.userData.ttl = 80; scene.add(ln); vfx.push(ln);
+    }
+    function spawnHitSpark(p){
+      const g = new THREE.SphereGeometry(0.06, 8, 8);
+      const m = new THREE.MeshBasicMaterial({ color:0xffffcc });
+      const s = new THREE.Mesh(g, m); s.position.copy(p); s.userData.ttl = 120; vfx.push(s); scene.add(s);
+    }
+    const vfx = [];
+
+    // Bots
+    const botGroup = new THREE.Group(); scene.add(botGroup);
+    const BOT_COLOR = 0xff5577;
+    function makeBot(){
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.6,1.6,0.4), new THREE.MeshStandardMaterial({ color:BOT_COLOR, metalness:0.1, roughness:0.7 }));
+      body.castShadow=true; body.receiveShadow=true;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.36,0.36,0.36), new THREE.MeshStandardMaterial({ color:0xffbcc7 })); head.position.y = 1.0; body.add(head);
+      body.position.set((Math.random()-0.5)*80, 0.8, (Math.random()-0.5)*80);
+      body.userData.bot = { hp: 60, speed: 1.6 + Math.random()*0.6, body };
+      botGroup.add(body);
+    }
+    function killBot(b){
+      score += 10; scoreEl.textContent = score;
+      botGroup.remove(b.body);
+      // pop effect
+      spawnHitSpark(b.body.position.clone());
+      // respawn after delay
+      setTimeout(()=> makeBot(), 1200);
+    }
+
+    // spawn initial bots
+    for (let i=0;i<8;i++) makeBot();
+    botsEl.textContent = botGroup.children.length;
+
+    // Basic bot AI — chase player, wobble, deal contact damage
+    function updateBots(dt){
+      botsEl.textContent = botGroup.children.length;
+      const playerPos = camera.position;
+      for (const mesh of botGroup.children){
+        const bot = mesh.userData.bot; if (!bot) continue;
+        const toPlayer = new THREE.Vector3().subVectors(playerPos, mesh.position);
+        const dist = toPlayer.length();
+        toPlayer.normalize();
+        // simple wander + chase
+        const wobble = Math.sin(performance.now()*0.001 + mesh.id)*0.6;
+        mesh.position.addScaledVector(toPlayer, bot.speed * dt * (dist>2?1:0));
+        mesh.position.x += Math.sin(mesh.id + performance.now()*0.0007)*0.02;
+        mesh.lookAt(playerPos.x, mesh.position.y, playerPos.z);
+        // damage if touching
+        if (dist < 1.2){
+          HP = Math.max(0, HP - 10*dt); hpEl.textContent = HP.toFixed(0);
+          if (HP<=0){ gameOver(); return; }
+        }
+      }
+    }
+
+    function gameOver(){
+      controls.unlock();
+      overlay.style.display='flex';
+      overlay.querySelector('h1').textContent = 'Game Over';
+      overlay.querySelector('.small').textContent = `Score: ${score}`;
+      playBtn.textContent = 'Play Again'; playBtn.style.display='inline-block';
+      // reset player
+      HP = 100; hpEl.textContent = 100; score = 0; scoreEl.textContent = 0;
+      // clear bots and respawn
+      botGroup.clear(); for (let i=0;i<8;i++) makeBot();
+    }
+
+    // Movement & loop
+    let prev = performance.now();
+    function animate(ts){
+      const dt = Math.min(0.05, (ts - prev)/1000); prev = ts;
+
+      // Movement
+      const speed = (keys['ShiftLeft']? 7.5 : 4.0);
+      direction.set(0,0,0);
+      if (keys['KeyW']) direction.z -= 1;
+      if (keys['KeyS']) direction.z += 1;
+      if (keys['KeyA']) direction.x -= 1;
+      if (keys['KeyD']) direction.x += 1;
+      direction.normalize();
+      if (controls.isLocked){
+        const forward = new THREE.Vector3(); controls.getDirection(forward);
+        forward.y = 0; forward.normalize();
+        const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).multiplyScalar(-1);
+        camera.position.addScaledVector(forward, direction.z * speed * dt);
+        camera.position.addScaledVector(right,   direction.x * speed * dt);
+        // keep inside arena
+        camera.position.x = THREE.MathUtils.clamp(camera.position.x, -58, 58);
+        camera.position.z = THREE.MathUtils.clamp(camera.position.z, -58, 58);
+      }
+
+      // Update VFX
+      for (let i=vfx.length-1;i>=0;i--){ const o=vfx[i]; o.userData.ttl -= dt*1000; if (o.userData.ttl<=0){ scene.remove(o); vfx.splice(i,1);} }
+
+      updateBots(dt);
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
+
+    window.addEventListener('resize', ()=>{
+      camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
   </script>
 </body>
 </html>
