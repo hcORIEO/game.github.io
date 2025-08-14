@@ -1,1 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Square Dodger</title>
+  <style>
+    /* ===============================
+       Square Dodger — tiny JS game
+       ===============================
+       Hosting on GitHub Pages:
+       1) Save this file as: index.html (exact name)
+       2) Put it in your repo root (not inside a folder)
+       3) Commit & push, then enable Pages: main / (root)
+       4) Open https://<your-username>.github.io/<repo-name>/
+    */
 
+    :root {
+      --bg: #0f1226;     /* background */
+      --panel: #15183a;  /* frame */
+      --text: #e9ecff;   /* text */
+      --player: #ffd166; /* player color */
+      --danger: #ff4d6d; /* enemy */
+      --ok: #8be9fd;     /* accents */
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: radial-gradient(1200px 800px at 20% -10%, #1b1f47 0%, var(--bg) 60%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial;
+      display: grid; place-items: center;
+      padding: 14px;
+    }
+
+    .wrap { width: min(860px, 100%); }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+    h1 { font-size: clamp(20px, 3vw, 28px); margin: 0; }
+    .muted { opacity: 0.8; font-size: 0.95rem; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    button {
+      background: var(--panel); color: var(--text);
+      border: 1px solid #2b2f59; border-radius: 999px; padding: 8px 12px;
+      font-weight: 700; cursor: pointer;
+    }
+
+    .frame {
+      position: relative; border: 1px solid #2b2f59; border-radius: 16px;
+      overflow: hidden; box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+    }
+
+    canvas { display: block; width: 100%; height: auto; background: #0b0f27; }
+
+    .hud { position: absolute; inset: 0 0 auto 0; display:flex; justify-content:space-between; padding: 10px 14px; pointer-events:none; }
+    .badge { background: rgba(0,0,0,0.35); padding: 6px 10px; border-radius: 999px; border:1px solid rgba(255,255,255,0.1); font-weight: 800; }
+
+    .mobile { position: absolute; left: 50%; transform: translateX(-50%); bottom: 10px; display: none; gap: 10px; }
+    .touch { width: 64px; height: 64px; border-radius: 50%; background: var(--panel); color: var(--text); border: 1px solid #2b2f59; display: grid; place-items:center; font-size: 24px; }
+
+    @media (max-width: 640px){ .mobile { display: flex; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Square Dodger</h1>
+        <div class="muted">Move left/right and avoid falling blocks. Survive to score!</div>
+      </div>
+      <div class="row">
+        <button id="startBtn">Start</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+    </header>
+
+    <div class="frame">
+      <canvas id="game" width="860" height="520"></canvas>
+      <div class="hud">
+        <div class="badge">Score: <span id="score">0</span></div>
+        <div class="badge">Best: <span id="best">0</span></div>
+        <div class="badge">Lives: <span id="lives">3</span></div>
+      </div>
+      <div class="mobile">
+        <button class="touch" id="left">⟵</button>
+        <button class="touch" id="right">⟶</button>
+      </div>
+    </div>
+
+    <p class="muted">Controls: ← / → or A / D to move · Space = start/pause · R = reset</p>
+  </div>
+
+  <script>
+    // ======= Config (easy to edit) =======
+    const CFG = {
+      playerW: 80,
+      playerH: 18,
+      playerSpeed: 8,
+      gravity: 0.23,
+      spawnEvery: 700, // ms
+      dangerMin: 16,
+      dangerMax: 32,
+      maxLives: 3,
+    };
+
+    const COLORS = {
+      player: getComputedStyle(document.documentElement).getPropertyValue('--player') || '#ffd166',
+      danger: getComputedStyle(document.documentElement).getPropertyValue('--danger') || '#ff4d6d',
+      ok: getComputedStyle(document.documentElement).getPropertyValue('--ok') || '#8be9fd',
+      text: getComputedStyle(document.documentElement).getPropertyValue('--text') || '#e9ecff',
+    };
+
+    // ======= State =======
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const livesEl = document.getElementById('lives');
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const leftBtn = document.getElementById('left');
+    const rightBtn = document.getElementById('right');
+
+    const W = canvas.width; const H = canvas.height;
+    const state = {
+      playing: false,
+      paused: false,
+      score: 0,
+      best: Number(localStorage.getItem('dodger-best') || 0),
+      lives: CFG.maxLives,
+      lastSpawn: 0,
+      blocks: [],
+      keys: new Set(),
+      player: { x: W/2, y: H-36, w: CFG.playerW, h: CFG.playerH },
+    };
+    bestEl.textContent = state.best;
+
+    // ======= Input =======
+    window.addEventListener('keydown', (e)=>{
+      const k = e.key.toLowerCase();
+      if (['arrowleft','arrowright','a','d'].includes(k)) state.keys.add(k);
+      if (k === ' ') togglePause();
+      if (k === 'r') reset();
+    });
+    window.addEventListener('keyup', (e)=> state.keys.delete(e.key.toLowerCase()));
+
+    let touchDir = 0; // -1 left, +1 right
+    const press = (d)=> ()=> touchDir = d;
+    const release = (d)=> ()=> { if (touchDir === d) touchDir = 0; };
+    ['pointerdown','touchstart'].forEach(ev=>{
+      leftBtn.addEventListener(ev, press(-1), { passive: true });
+      rightBtn.addEventListener(ev, press(1), { passive: true });
+    });
+    ['pointerup','pointerleave','touchend'].forEach(ev=>{
+      leftBtn.addEventListener(ev, release(-1));
+      rightBtn.addEventListener(ev, release(1));
+    });
+
+    startBtn.onclick = start; pauseBtn.onclick = togglePause; resetBtn.onclick = reset;
+
+    // ======= Game helpers =======
+    function start(){
+      if (!state.playing){
+        state.playing = true; state.paused = false; state.blocks = [];
+        state.score = 0; state.lives = CFG.maxLives; state.lastSpawn = 0;
+        scoreEl.textContent = 0; livesEl.textContent = state.lives;
+        last = performance.now();
+        requestAnimationFrame(loop);
+      }
+    }
+    function togglePause(){ if (!state.playing) { start(); return; } state.paused = !state.paused; if (!state.paused) { last = performance.now(); requestAnimationFrame(loop); } }
+    function reset(){ state.playing = false; state.paused = false; state.blocks = []; state.score = 0; state.lives = CFG.maxLives; scoreEl.textContent = 0; livesEl.textContent = state.lives; draw(); }
+
+    function spawn(){
+      const w = rnd(CFG.dangerMin, CFG.dangerMax);
+      const x = rnd(0, W - w);
+      const y = -w;
+      const vx = rnd(-0.6, 0.6);
+      const vy = rnd(1.8, 2.4);
+      state.blocks.push({ x, y, w, h: w, vx, vy });
+    }
+    function rnd(a,b){ return a + Math.random()*(b-a); }
+
+    function collideRect(ax, ay, aw, ah, bx, by, bw, bh){
+      return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    }
+
+    // ======= Drawing =======
+    function drawBackground(){
+      // little stars
+      const n = 120; ctx.save(); ctx.globalAlpha = 0.6;
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      for (let i = 0; i < n; i++){
+        const x = (i*73 % W); const y = (i*137 % H);
+        const r = (i%5)*0.25 + 0.2; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+
+      // glow at bottom
+      const g = ctx.createLinearGradient(0, H*0.6, 0, H);
+      g.addColorStop(0, 'rgba(139,233,253,0)');
+      g.addColorStop(1, 'rgba(139,233,253,0.25)');
+      ctx.fillStyle = g; ctx.fillRect(0, H*0.6, W, H*0.4);
+    }
+
+    function drawPlayer(){
+      const p = state.player; ctx.fillStyle = COLORS.player; round(ctx, p.x - p.w/2, p.y - p.h/2, p.w, p.h, 9); ctx.fill();
+    }
+
+    function drawBlocks(){
+      ctx.fillStyle = COLORS.danger;
+      for (const b of state.blocks){ round(ctx, b.x, b.y, b.w, b.h, 6); ctx.fill(); }
+    }
+
+    function round(ctx, x, y, w, h, r){
+      const rr = Math.min(r, w/2, h/2);
+      ctx.beginPath(); ctx.moveTo(x+rr, y);
+      ctx.arcTo(x+w, y, x+w, y+h, rr);
+      ctx.arcTo(x+w, y+h, x, y+h, rr);
+      ctx.arcTo(x, y+h, x, y, rr);
+      ctx.arcTo(x, y, x+w, y, rr);
+      ctx.closePath();
+    }
+
+    function overlay(title, sub){
+      ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = COLORS.text; ctx.textAlign = 'center';
+      ctx.font = '700 42px system-ui, -apple-system, Segoe UI, Roboto'; ctx.fillText(title, W/2, H/2 - 10);
+      ctx.font = '500 18px system-ui, -apple-system, Segoe UI, Roboto'; if (sub) ctx.fillText(sub, W/2, H/2 + 24);
+      ctx.restore();
+    }
+
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      drawBackground();
+      drawBlocks();
+      drawPlayer();
+      if (!state.playing) overlay('Square Dodger', 'Press Space or Start');
+      else if (state.paused) overlay('Paused', 'Press Space to resume');
+    }
+
+    // ======= Loop =======
+    let last = performance.now();
+    function loop(ts){
+      if (!state.playing || state.paused){ draw(); return; }
+      const dt = Math.min(33, ts - last); last = ts; // clamp
+
+      // Move player
+      const p = state.player; let dir = 0;
+      if (state.keys.has('arrowleft') || state.keys.has('a')) dir -= 1;
+      if (state.keys.has('arrowright') || state.keys.has('d')) dir += 1;
+      dir += touchDir;
+      p.x += dir * CFG.playerSpeed; p.x = Math.max(p.w/2, Math.min(W - p.w/2, p.x));
+
+      // Spawn blocks
+      state.lastSpawn += dt; if (state.lastSpawn >= CFG.spawnEvery){ state.lastSpawn = 0; spawn(); }
+
+      // Update blocks
+      for (const b of state.blocks){ b.vy += CFG.gravity * (dt/16.67); b.x += b.vx * (dt/16.67); b.y += (b.vy||2) * (dt/16.67); }
+
+      // Collisions & cleanup
+      for (let i = state.blocks.length - 1; i >= 0; i--){
+        const b = state.blocks[i];
+        // walls
+        if (b.x < 0 && b.vx < 0) b.vx *= -0.9;
+        if (b.x + b.w > W && b.vx > 0) b.vx *= -0.9;
+        if (collideRect(p.x - p.w/2, p.y - p.h/2, p.w, p.h, b.x, b.y, b.w, b.h)){
+          state.blocks.splice(i,1); // hit
+          state.lives--; livesEl.textContent = state.lives;
+          if (state.lives <= 0){
+            state.playing = false;
+            if (state.score > state.best){ state.best = state.score; localStorage.setItem('dodger-best', String(state.best)); bestEl.textContent = state.best; }
+          }
+        } else if (b.y > H + 40){
+          state.blocks.splice(i,1); // escaped — award points
+          state.score++; scoreEl.textContent = state.score;
+          // slight ramp
+          CFG.spawnEvery = Math.max(380, CFG.spawnEvery - 2);
+        }
+      }
+
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    draw(); // first paint
+  </script>
+</body>
+</html>
